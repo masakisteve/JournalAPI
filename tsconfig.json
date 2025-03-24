@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2020",                            // 🆕 Upgrade target for modern JS features
-    "module": "commonjs",                          // ✅ Stays the same (Node.js)
+    "target": "es6",
+    "module": "commonjs",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,         // ✅ Stays the same (Node.js)
     "rootDir": "src",                              // 🆕 Your TS source code
     "outDir": "dist",                              // 🆕 Compiled JS output
     "esModuleInterop": true,                       // ✅
