@@ -1,41 +1,55 @@
 import { Request, Response } from 'express';
-import { AppDataSource } from '../index';
+import { AppDataSource } from '../data-source';
 import { JournalEntry } from '../models/JournalEntry';
-import { User } from '../models/User';
-
-const journalRepository = AppDataSource.getRepository(JournalEntry);
+import { Between, Like } from 'typeorm';
+import logger from '../utils/logger';
 
 export class JournalController {
-    static createEntry = async (req: Request, res: Response) => {
+    private static getJournalRepository() {
+        return AppDataSource.getRepository(JournalEntry);
+    }
+
+    static async createEntry(req: Request, res: Response) {
         try {
             const { title, content, categoryId, tags, mood } = req.body;
-            const userId = (req as any).user.id; // From auth middleware
+            const userId = (req as any).user.userId;
+            const repository = this.getJournalRepository();
 
-            const entry = journalRepository.create({
+            const entry = repository.create({
                 title,
                 content,
                 mood,
-                wordCount: content.split(' ').length,
+                wordCount: content.split(/\s+/).length,
                 entryDate: new Date(),
                 user: { id: userId },
-                category: { id: categoryId },
+                category: categoryId ? { id: categoryId } : null,
                 tags: tags?.map((id: number) => ({ id }))
             });
 
-            await journalRepository.save(entry);
+            await repository.save(entry);
+            logger.info('Journal entry created', { entryId: entry.id, userId });
             res.status(201).json(entry);
         } catch (error) {
+            logger.error('Error creating journal entry', { error });
             res.status(500).json({ message: "Error creating entry" });
         }
-    };
+    }
 
-    static getEntries = async (req: Request, res: Response) => {
+    static async getEntries(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
-            const { category, startDate, endDate, tags } = req.query;
+            const userId = (req as any).user.userId;
+            const { 
+                category,
+                startDate,
+                endDate,
+                search,
+                mood,
+                page = 1,
+                limit = 10
+            } = req.query;
 
-            let queryBuilder = journalRepository
-                .createQueryBuilder('entry')
+            const repository = this.getJournalRepository();
+            const queryBuilder = repository.createQueryBuilder('entry')
                 .where('entry.user.id = :userId', { userId })
                 .leftJoinAndSelect('entry.category', 'category')
                 .leftJoinAndSelect('entry.tags', 'tags');
@@ -51,37 +65,53 @@ export class JournalController {
                 });
             }
 
-            if (tags) {
-                queryBuilder.andWhere('tags.id IN (:...tagIds)', { tagIds: tags });
+            if (search) {
+                queryBuilder.andWhere(
+                    '(entry.title LIKE :search OR entry.content LIKE :search)',
+                    { search: `%${search}%` }
+                );
             }
 
-            const entries = await queryBuilder
-                .orderBy('entry.entryDate', 'DESC')
-                .getMany();
+            if (mood) {
+                queryBuilder.andWhere('entry.mood = :mood', { mood });
+            }
 
-            res.json(entries);
+            const [entries, total] = await queryBuilder
+                .skip((page - 1) * limit)
+                .take(limit)
+                .getManyAndCount();
+
+            res.json({
+                entries,
+                total,
+                page,
+                totalPages: Math.ceil(total / limit)
+            });
         } catch (error) {
+            logger.error('Error fetching entries', { error });
             res.status(500).json({ message: "Error fetching entries" });
         }
-    };
+    }
 
-    static getSummary = async (req: Request, res: Response) => {
+    static async getSummary(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
-            const { timeframe } = req.query; // 'week', 'month', 'year'
+            const userId = (req as any).user.userId;
+            const { timeframe = 'month' } = req.query;
+            const repository = this.getJournalRepository();
 
-            // Get entry counts by category
-            const categoryCounts = await journalRepository
+            // Entry count by category
+            const categoryStats = await repository
                 .createQueryBuilder('entry')
                 .select('category.name', 'category')
                 .addSelect('COUNT(*)', 'count')
+                .addSelect('SUM(entry.wordCount)', 'totalWords')
                 .leftJoin('entry.category', 'category')
                 .where('entry.user.id = :userId', { userId })
                 .groupBy('category.name')
                 .getRawMany();
 
-            // Get word count trends
-            const wordCountTrend = await journalRepository
+            // Word count trends
+            const wordCountTrend = await repository
                 .createQueryBuilder('entry')
                 .select('DATE(entry.entryDate)', 'date')
                 .addSelect('SUM(entry.wordCount)', 'totalWords')
@@ -91,23 +121,84 @@ export class JournalController {
                 .limit(30)
                 .getRawMany();
 
+            // Mood distribution
+            const moodStats = await repository
+                .createQueryBuilder('entry')
+                .select('entry.mood', 'mood')
+                .addSelect('COUNT(*)', 'count')
+                .where('entry.user.id = :userId', { userId })
+                .andWhere('entry.mood IS NOT NULL')
+                .groupBy('entry.mood')
+                .getRawMany();
+
             res.json({
-                categoryCounts,
+                categoryStats,
                 wordCountTrend,
-                // Add more summary data as needed
+                moodStats,
+                totalEntries: await repository.count({
+                    where: { user: { id: userId } }
+                })
             });
         } catch (error) {
+            logger.error('Error generating summary', { error });
             res.status(500).json({ message: "Error generating summary" });
         }
-    };
+    }
 
-    static deleteEntry = async (req: Request, res: Response) => {
+    static async updateEntry(req: Request, res: Response) {
         try {
-         
-        } catch (error) {
-            res.status(500).json({ message: "Error generating summary" });
-        }
-    };
+            const { id } = req.params;
+            const userId = (req as any).user.userId;
+            const { title, content, categoryId, tags, mood } = req.body;
+            const repository = this.getJournalRepository();
 
-    // Add other methods for update, delete, etc.
+            const entry = await repository.findOne({
+                where: { id, user: { id: userId } },
+                relations: ['tags']
+            });
+
+            if (!entry) {
+                return res.status(404).json({ message: "Entry not found" });
+            }
+
+            Object.assign(entry, {
+                title,
+                content,
+                mood,
+                wordCount: content.split(/\s+/).length,
+                category: categoryId ? { id: categoryId } : null,
+                tags: tags?.map((id: number) => ({ id }))
+            });
+
+            await repository.save(entry);
+            logger.info('Journal entry updated', { entryId: entry.id, userId });
+            res.json(entry);
+        } catch (error) {
+            logger.error('Error updating entry', { error });
+            res.status(500).json({ message: "Error updating entry" });
+        }
+    }
+
+    static async deleteEntry(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const userId = (req as any).user.userId;
+            const repository = this.getJournalRepository();
+
+            const entry = await repository.findOne({
+                where: { id, user: { id: userId } }
+            });
+
+            if (!entry) {
+                return res.status(404).json({ message: "Entry not found" });
+            }
+
+            await repository.remove(entry);
+            logger.info('Journal entry deleted', { entryId: id, userId });
+            res.json({ message: "Entry deleted successfully" });
+        } catch (error) {
+            logger.error('Error deleting entry', { error });
+            res.status(500).json({ message: "Error deleting entry" });
+        }
+    }
 }
