@@ -138,3 +138,41 @@ curl -X GET "http://localhost:5000/api/journals?page=1&limit=10&category=1&mood=
 ```
 
 ## Project Structure
+src/
+├── config/
+│ └── database.ts
+├── controllers/
+│ ├── AuthController.ts
+│ └── JournalController.ts
+├── middleware/
+│ ├── auth.ts
+│ ├── validation.ts
+│ └── requestLogger.ts
+├── models/
+│ ├── User.ts
+│ └── JournalEntry.ts
+├── routes/
+│ ├── authRoutes.ts
+│ └── journalRoutes.ts
+├── utils/
+│ └── logger.ts
+├── data-source.ts
+└── index.ts
+
+##AI Implementation
+I have implemented sentiment analysis and theme detection for journal entries using the Natural Language Processing capabilities of the OpenAI API.
+This implementation provides:
+Sentiment analysis for each entry
+Automatic theme detection
+Category suggestions
+Writing style analysis
+Personalized writing prompts
+Insights and patterns analysis
+
+The AI features will:
+Analyze the mood and sentiment of entries
+Detect main themes and topics
+Suggest relevant categories
+Generate contextual writing prompts
+Provide writing style feedback
+Track patterns and insights over time

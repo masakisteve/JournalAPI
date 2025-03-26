@@ -38,4 +38,21 @@ export class JournalEntry {
     @ManyToMany(() => Tag)
     @JoinTable()
     tags: Tag[];
+
+    @Column('json', { nullable: true })
+    aiAnalysis: {
+        sentiment: {
+            mood: string;
+            score: number;
+        };
+        themes: string[];
+        topics: string[];
+        writingStyle: {
+            tone: string;
+            complexity: string;
+        };
+    };
+
+    @Column('simple-array', { nullable: true })
+    suggestedCategories: string[];
 }

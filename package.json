@@ -23,6 +23,7 @@
     "express-validator": "^7.2.1",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.14.0",
+    "openai": "^4.89.0",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.21",
     "winston": "^3.17.0"

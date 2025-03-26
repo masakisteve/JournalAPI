@@ -9,35 +9,6 @@ export class JournalController {
         return AppDataSource.getRepository(JournalEntry);
     }
 
-    static async createEntry(req: Request, res: Response) {
-        try {
-            const { title, content, categoryId, tags, mood } = req.body;
-            const userId = (req as any).user.userId;
-            const repository = this.getJournalRepository();
-
-            // Create the entry with proper typing
-            const entryData: DeepPartial<JournalEntry> = {
-                title,
-                content,
-                mood,
-                wordCount: content.split(/\s+/).length,
-                entryDate: new Date(),
-                user: { id: userId },
-                category: categoryId ? { id: categoryId } : undefined,  // Change null to undefined
-                tags: tags?.map((id: number) => ({ id }))
-            };
-
-            const entry = repository.create(entryData);
-            await repository.save(entry);
-            
-            logger.info('Journal entry created', { entryId: entry.id, userId });
-            res.status(201).json(entry);
-        } catch (error) {
-            logger.error('Error creating journal entry', { error });
-            res.status(500).json({ message: "Error creating entry" });
-        }
-    }
-
     static async getEntries(req: Request, res: Response) {
         try {
             const userId = (req as any).user.userId;
@@ -205,5 +176,113 @@ export class JournalController {
             logger.error('Error deleting entry', { error });
             res.status(500).json({ message: "Error deleting entry" });
         }
+    }
+    static async createEntry(req: Request, res: Response) {
+        try {
+            const { title, content, categoryId, tags, mood } = req.body;
+            const userId = (req as any).user.userId;
+            const repository = this.getJournalRepository();
+
+            // Perform AI analysis
+            const [aiAnalysis, suggestedCategories] = await Promise.all([
+                AIAnalysisService.analyzeEntry(content),
+                AIAnalysisService.suggestCategories(content)
+            ]);
+
+            const entryData: DeepPartial<JournalEntry> = {
+                title,
+                content,
+                mood: mood || aiAnalysis.sentiment.mood, // Use AI-detected mood if not provided
+                wordCount: content.split(/\s+/).length,
+                entryDate: new Date(),
+                user: { id: userId },
+                category: categoryId ? { id: categoryId } : undefined,
+                tags: tags?.map((id: number) => ({ id })),
+                aiAnalysis,
+                suggestedCategories
+            };
+
+            const entry = repository.create(entryData);
+            await repository.save(entry);
+            
+            logger.info('Journal entry created with AI analysis', { 
+                entryId: entry.id, 
+                userId,
+                aiMood: aiAnalysis.sentiment.mood
+            });
+
+            res.status(201).json(entry);
+        } catch (error) {
+            logger.error('Error creating journal entry', { error });
+            res.status(500).json({ message: "Error creating entry" });
+        }
+    }
+
+    static async getWritingPrompt(req: Request, res: Response) {
+        try {
+            const userId = (req as any).user.userId;
+            const repository = this.getJournalRepository();
+
+            // Get themes from recent entries
+            const recentEntries = await repository.find({
+                where: { user: { id: userId } },
+                order: { entryDate: 'DESC' },
+                take: 5
+            });
+
+            const themes = recentEntries
+                .map(entry => entry.aiAnalysis?.themes || [])
+                .flat();
+
+            const prompt = await AIAnalysisService.generateWritingPrompt(themes);
+
+            res.json({ prompt });
+        } catch (error) {
+            logger.error('Error generating writing prompt', { error });
+            res.status(500).json({ message: "Error generating prompt" });
+        }
+    }
+
+    static async getInsights(req: Request, res: Response) {
+        try {
+            const userId = (req as any).user.userId;
+            const repository = this.getJournalRepository();
+
+            const entries = await repository.find({
+                where: { user: { id: userId } },
+                order: { entryDate: 'DESC' },
+                take: 30 // Last 30 entries
+            });
+
+            // Aggregate insights
+            const insights = {
+                predominantMoods: this.aggregateMoods(entries),
+                commonThemes: this.aggregateThemes(entries),
+                writingPatterns: this.analyzeWritingPatterns(entries),
+                topicEvolution: this.analyzeTopicEvolution(entries)
+            };
+
+            res.json(insights);
+        } catch (error) {
+            logger.error('Error generating insights', { error });
+            res.status(500).json({ message: "Error generating insights" });
+        }
+    }
+
+    // Helper methods for insights
+    private static aggregateMoods(entries: JournalEntry[]) {
+        // Implementation details...
+    }
+
+    private static aggregateThemes(entries: JournalEntry[]) {
+        // Implementation details...
+    }
+
+    private static analyzeWritingPatterns(entries: JournalEntry[]) {
+        // Implementation details...
+    }
+
+    private static analyzeTopicEvolution(entries: JournalEntry[]) {
+        // Implementation details...
     }
 }

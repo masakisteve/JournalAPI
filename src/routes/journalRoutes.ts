@@ -56,4 +56,20 @@ router.delete('/:id', async (req, res, next) => {
     }
 });
 
+router.get('/prompt', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await JournalController.getWritingPrompt(req, res);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/insights', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await JournalController.getInsights(req, res);
+    } catch (error) {
+        next(error);
+    }
+});
+
 export default router;
