@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { JournalEntry } from '../models/JournalEntry';
-import { Between, Like } from 'typeorm';
+import { Between, Like, DeepPartial } from 'typeorm';
 import logger from '../utils/logger';
 
 export class JournalController {
@@ -15,18 +15,21 @@ export class JournalController {
             const userId = (req as any).user.userId;
             const repository = this.getJournalRepository();
 
-            const entry = repository.create({
+            // Create the entry with proper typing
+            const entryData: DeepPartial<JournalEntry> = {
                 title,
                 content,
                 mood,
                 wordCount: content.split(/\s+/).length,
                 entryDate: new Date(),
                 user: { id: userId },
-                category: categoryId ? { id: categoryId } : null,
+                category: categoryId ? { id: categoryId } : undefined,  // Change null to undefined
                 tags: tags?.map((id: number) => ({ id }))
-            });
+            };
 
+            const entry = repository.create(entryData);
             await repository.save(entry);
+            
             logger.info('Journal entry created', { entryId: entry.id, userId });
             res.status(201).json(entry);
         } catch (error) {
@@ -44,43 +47,45 @@ export class JournalController {
                 endDate,
                 search,
                 mood,
-                page = 1,
-                limit = 10
             } = req.query;
-
+    
+            // Parse pagination parameters with defaults
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 10;
+    
             const repository = this.getJournalRepository();
             const queryBuilder = repository.createQueryBuilder('entry')
                 .where('entry.user.id = :userId', { userId })
                 .leftJoinAndSelect('entry.category', 'category')
                 .leftJoinAndSelect('entry.tags', 'tags');
-
+    
             if (category) {
                 queryBuilder.andWhere('category.id = :categoryId', { categoryId: category });
             }
-
+    
             if (startDate && endDate) {
                 queryBuilder.andWhere('entry.entryDate BETWEEN :startDate AND :endDate', {
                     startDate,
                     endDate
                 });
             }
-
+    
             if (search) {
                 queryBuilder.andWhere(
                     '(entry.title LIKE :search OR entry.content LIKE :search)',
                     { search: `%${search}%` }
                 );
             }
-
+    
             if (mood) {
                 queryBuilder.andWhere('entry.mood = :mood', { mood });
             }
-
+    
             const [entries, total] = await queryBuilder
                 .skip((page - 1) * limit)
                 .take(limit)
                 .getManyAndCount();
-
+    
             res.json({
                 entries,
                 total,

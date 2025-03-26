@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { JournalController } from '../controllers/JournalController';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validation';
@@ -16,7 +16,7 @@ const entryValidation = [
     body('mood').optional().isString()
 ];
 
-router.post('/', entryValidation, validate, async (req, res, next) => {
+router.post('/', entryValidation, validate, async (req: Request, res: Response, next: NextFunction) => {
     try {
         await JournalController.createEntry(req, res);
     } catch (error) {
@@ -40,7 +40,7 @@ router.get('/summary', async (req, res, next) => {
     }
 });
 
-router.put('/:id', entryValidation, validate, async (req, res, next) => {
+router.put('/:id', entryValidation, validate, async (req: Request, res: Response, next: NextFunction) => {
     try {
         await JournalController.updateEntry(req, res);
     } catch (error) {

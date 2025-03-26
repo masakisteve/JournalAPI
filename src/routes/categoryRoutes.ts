@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { CategoryController } from '../controllers/CategoryController';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validation';
@@ -13,7 +13,7 @@ const categoryValidation = [
     body('description').optional()
 ];
 
-router.post('/', categoryValidation, validate, async (req, res, next) => {
+router.post('/', categoryValidation, validate, async (req: Request, res: Response, next: NextFunction) => {
     try {
         await CategoryController.create(req, res);
     } catch (error) {
