@@ -3,6 +3,7 @@ import { AppDataSource } from '../data-source';
 import { JournalEntry } from '../models/JournalEntry';
 import { Between, Like, DeepPartial } from 'typeorm';
 import logger from '../utils/logger';
+import { AIAnalysisService } from '../services/AIAnalysisService';  // Add this import
 
 export class JournalController {
     private static getJournalRepository() {
